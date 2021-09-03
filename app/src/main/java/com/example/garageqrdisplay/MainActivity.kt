@@ -31,11 +31,17 @@ import java.util.logging.Logger
 import android.graphics.Bitmap
 
 import android.content.ContextWrapper
+import android.graphics.Bitmap.createBitmap
 import java.lang.Exception
 
 
 
 import android.graphics.BitmapFactory
+import android.widget.Toast
+import com.google.mlkit.vision.barcode.Barcode
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
 import java.io.*
 
 
@@ -49,6 +55,11 @@ class MainActivity : AppCompatActivity() {
     private var sMode = 0
     private var sBrightness = 0
     private val image_path = "qr.jpg"
+    private val options = BarcodeScannerOptions.Builder()
+        .setBarcodeFormats(
+            Barcode.FORMAT_QR_CODE,
+            Barcode.FORMAT_AZTEC)
+        .build()
     companion object {
         private const val WRITE_SETTINGS_PERMISSION = 100
         private const val MAX_BRIGHTNESS = 255
@@ -251,10 +262,29 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == RESULT_OK && requestCode == pickImage) {
             imageUri = data?.data
-            val bitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, imageUri)
-            saveToInternalStorage(bitmap)
+            val bitmap = MediaStore.Images.Media.getBitmap(this.contentResolver, imageUri)!!
+            //saveToInternalStorage(bitmap)
             val im = findViewById<ImageView>(R.id.image_qr)
-            im.setImageURI(imageUri)
+            val qrimage = InputImage.fromBitmap(bitmap, 0)
+            val scanner = BarcodeScanning.getClient(options)
+            val result =  scanner.process(qrimage).addOnSuccessListener{
+                if (it.size != 1){
+                    Toast.makeText(applicationContext, "Fatal: Please make sure that there are only 1 QR code present in image. Currently detected ${it.size} QR codes", Toast.LENGTH_SHORT).show()
+                }
+                else{
+                    val barcode = it[0]
+                    if (barcode.valueType != Barcode.TYPE_TEXT){
+                        Toast.makeText(applicationContext, "Warning: type of QR code does not match expectation", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    val bbox = barcode.boundingBox
+                    val resizedbitmap = createBitmap(bitmap, bbox.left, bbox.top, bbox.width(), bbox.height())
+                    saveToInternalStorage(resizedbitmap)
+                    im.setImageBitmap(resizedbitmap)
+                }
+            }.addOnFailureListener{
+                Toast.makeText(applicationContext, "Fatal: Could not find a QR code in the image", Toast.LENGTH_SHORT).show()
+            }
+
         }
     }
 
